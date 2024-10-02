@@ -1,0 +1,145 @@
+#!/bin/python3
+
+import argparse
+import sys
+import os
+import time
+import requests
+import concurrent.futures
+import random
+import string
+
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:91.0) Gecko/20100101 Firefox/91.0",
+    "Mozilla/5.0 (X11; Red Hat; Linux x86_64; rv:91.0) Gecko/20100101 Firefox/91.0"
+]
+
+def generate_random_filename():
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=10)) + ".txt"
+
+def send_request(url, method, headers, timeout, follow_redirects, log_file, output_dir, silent, verbose):
+    try:
+        headers['User-Agent'] = random.choice(USER_AGENTS)
+        start_time = time.time()
+
+        if method.upper() == 'GET':
+            response = requests.get(url, headers=headers, timeout=timeout, allow_redirects=follow_redirects)
+        elif method.upper() == 'POST':
+            response = requests.post(url, headers=headers, timeout=timeout, allow_redirects=follow_redirects)
+        elif method.upper() == 'PUT':
+            response = requests.put(url, headers=headers, timeout=timeout, allow_redirects=follow_redirects)
+        elif method.upper() == 'DELETE':
+            response = requests.delete(url, headers=headers, timeout=timeout, allow_redirects=follow_redirects)
+        elif method.upper() == 'OPTIONS':
+            response = requests.options(url, headers=headers, timeout=timeout, allow_redirects=follow_redirects)
+        elif method.upper() == 'TRACE':
+            response = requests.trace(url, headers=headers, timeout=timeout, allow_redirects=follow_redirects)
+        elif method.upper() == 'HEAD':
+            response = requests.head(url, headers=headers, timeout=timeout, allow_redirects=follow_redirects)
+        else:
+            if not silent:
+                print(f"Unsupported HTTP method: {method}")
+            return
+
+        request_time = time.time() - start_time
+        filename = os.path.join(output_dir, generate_random_filename())
+
+        with open(filename, 'w') as f:
+            f.write(f"Request URL: {url}\n")
+            f.write(f"Request Method: {method}\n")
+
+            f.write("Request Headers:\n")
+            for key, value in headers.items():
+                f.write(f"{key}: {value}\n")
+
+            f.write(f"\nResponse Code: {response.status_code}\n")
+            f.write("Response Headers:\n")
+            for key, value in response.headers.items():
+                f.write(f"{key}: {value}\n")
+
+            f.write(f"\nResponse Body:\n{response.text}\n")
+            if verbose:
+                f.write(f"\nTime Taken: {request_time:.2f} seconds\n")
+
+        with open(log_file, 'a') as log:
+            log.write(f"{url} -> [{response.status_code}] {filename}\n")
+
+        if verbose:
+            print(f"Saved response from {url} to {filename} with status code: {response.status_code} in {request_time:.2f} seconds")
+        elif not silent:
+            print(f"Saved response from {url} to {filename} with status code: {response.status_code}")
+    except requests.RequestException as e:
+        if not silent:
+            print(f"Error with {url}: {e}")
+
+def main():
+    try:
+        parser = argparse.ArgumentParser(
+                description="Description: m3g is a powerful command-line utility by 0verf3ar designed for efficiently fetching multiple URLs using the requests library. With support for various HTTP methods, customizable headers, and options for concurrency, m3g simplifies the process of making bulk web requests. The dynamic user-agent rotation, configurable concurrency and delay time makes it so human-like and hard for WAF to detect. Ideal for developers, researchers and bounty hunters, m3g allows users to log responses, manage timeouts, and follow redirects, all while ensuring a smooth and user-friendly experience."
+        )
+
+        parser.add_argument("-t", "--target", type=str, help="Specify a domain with URL scheme e.g.(http://domain.com)")
+        parser.add_argument("-f", "--file", type=str, help="Specify the file path containing URLs")
+        parser.add_argument("-X", "--request", type=str, default='GET', help="Specify the HTTP request method (e.g., GET, POST, PUT, DELETE, OPTIONS, TRACE, HEAD)")
+        parser.add_argument("-T", "--timeout", type=int, default=10, help="Set the timeout for request (default: 10 seconds)")
+        parser.add_argument("-c", "--concurrency", type=int, default=10, help="Set the concurrency level (default: 10)")
+        parser.add_argument("-L", "--follow", action="store_true", help="Follow redirects (3xx)")
+        parser.add_argument("-H", "--header", type=str, help="Specify a header in request")
+        parser.add_argument("-d", "--delay", type=int, default=0, help="Set the delay time between request batches (default: no delay)")
+        parser.add_argument("-l", "--log", type=str, default="request_log.txt", help="Specify the log file path (default: request_log.txt)")
+        parser.add_argument("--silent", action="store_true", help="Suppress all terminal output (except errors)")
+        parser.add_argument("--verbose", action="store_true", help="Enable verbose mode with extra details in the terminal and output files")
+
+        args = parser.parse_args()
+
+        if len(sys.argv) == 1:
+            parser.print_help()
+            sys.exit(1)
+
+        if not args.target or not args.file:
+            parser.print_help()
+            sys.exit(1)
+
+        headers = {}
+        if args.header:
+            header_key_value = args.header.split(":")
+            if len(header_key_value) == 2:
+                headers[header_key_value[0].strip()] = header_key_value[1].strip()
+
+        output_dir = os.path.join("/home", os.getenv("USER"), "out")
+        os.makedirs(output_dir, exist_ok=True)
+
+        with open(args.file, 'r') as file:
+            urls = [args.target.strip() + line.strip() for line in file if line.strip()]
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as executor:
+            for i in range(0, len(urls), args.concurrency):
+                batch_urls = urls[i:i + args.concurrency]
+
+                future_to_url = {executor.submit(send_request, url, args.request, headers, args.timeout, args.follow, args.log, output_dir, args.silent, args.verbose): url for url in batch_urls}
+
+                for future in concurrent.futures.as_completed(future_to_url):
+                    url = future_to_url[future]
+                    try:
+                        future.result()
+                    except Exception as e:
+                        if not args.silent:
+                            print(f"{url} generated an exception: {e}")
+
+                if args.delay > 0:
+                    if args.verbose and not args.silent:
+                        print(f"Sleeping for {args.delay} seconds before next batch...")
+                    time.sleep(args.delay)
+
+    except KeyboardInterrupt:
+        print("\n[*] Program was unexpectedly closed.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+
