@@ -60,20 +60,20 @@ Explanation: This command will read URLs from urls.txt and send GET requests to 
 ### Fastest Example
 This example increases concurrency to the maximum (50) and sets a very short timeout (1 second).
 ```bash
-python3 m3g.py -t http://example.com -f urls.txt -c 50 -T 1
+m3g -t http://example.com -f urls.txt -c 50 -T 1
 ```
 Explanation: This command will quickly send up to 50 concurrent GET requests with a timeout of 1 second for each request, maximizing speed.
 
 ### Careful to Not Get Recognized by WAF
 This example uses a delay between batches, random user agents, and a moderate concurrency level.
 ```bash
-python3 m3g.py -t http://example.com -f urls.txt -c 10 -d 5 --silent
+m3g -t http://example.com -f urls.txt -c 10 -d 5 --silent
 ```
 Explanation: This command sends GET requests to URLs in urls.txt with 10 concurrent requests, a 5-second delay between batches, and suppresses terminal output to make it less detectable by WAFs.
 
 ### Bounty Hunter Use Case
 This example uses a custom header (like a CSRF token), verbose output for detailed logging, and follows redirects.
 ```bash
-python3 m3g.py -t http://example.com -f urls.txt -H "X-CSRF-Token: your_csrf_token" -L -l log.txt -L --verbose -X POST
+m3g -t http://example.com -f urls.txt -H "X-CSRF-Token: your_csrf_token" -L -l log.txt -L --verbose -X POST
 ```
 Explanation: This command sends POST requests to URLs with a custom CSRF token header, logs the output to log.txt, enables verbose output for debugging, and allows for easy tracking of responses.
